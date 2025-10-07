@@ -1,19 +1,18 @@
 """
-Visualización del problema de las tres casas y tres servicios (K3,3) en 2D.
-Muestra las intersecciones entre las conexiones (imposibilidad de solución en el plano).
+Two dimensional attempt of the problem, showing inevitable edge intersections.
 """
 
 import matplotlib.pyplot as plt
 
 def draw_k33_2d():
-    # Posiciones de los nodos (casas arriba, servicios abajo)
+    # Node positions (houses on top row, services on bottom row)
     houses = {"A": (-2.0, 1.0), "B": (0.0, 1.0), "C": (2.0, 1.0)}
     services = {"A": (-2.0, -1.0), "B": (0.0, -1.0), "C": (2.0, -1.0)}
 
-    # Generar lista de aristas (cada arista es ((x1,y1),(x2,y2)))
+    # Generate edge list: every house connected to every service
     edges = [(hpos, spos) for hpos in houses.values() for spos in services.values()]
 
-    # --- Función para calcular intersecciones ---
+    # --- Segment intersection helper ---
     def seg_intersection(p1, p2, p3, p4):
         (x1,y1),(x2,y2) = p1,p2
         (x3,y3),(x4,y4) = p3,p4
@@ -28,7 +27,7 @@ def draw_k33_2d():
             return (ix, iy)
         return None
 
-    # --- Calcular intersecciones ---
+    # --- Compute intersections ---
     intersections = []
     for i in range(len(edges)):
         p1,p2 = edges[i]
@@ -40,7 +39,7 @@ def draw_k33_2d():
             if pt:
                 intersections.append(pt)
 
-    # --- Dibujar el gráfico ---
+    # --- Plot ---
     fig, ax = plt.subplots(figsize=(6,6))
     hx = [p[0] for p in houses.values()]
     hy = [p[1] for p in houses.values()]
@@ -51,9 +50,9 @@ def draw_k33_2d():
     ax.scatter(sx, sy, s=200)
 
     for name, pos in houses.items():
-        ax.text(pos[0], pos[1]+0.12, f"Casa {name}", ha="center", va="bottom")
+        ax.text(pos[0], pos[1]+0.12, f"House {name}", ha="center", va="bottom")
     for name, pos in services.items():
-        ax.text(pos[0], pos[1]-0.12, f"Serv {name}", ha="center", va="top")
+        ax.text(pos[0], pos[1]-0.12, f"Service {name}", ha="center", va="top")
 
     for p1,p2 in edges:
         xs = [p1[0], p2[0]]
@@ -64,9 +63,9 @@ def draw_k33_2d():
         ix_coords = [p[0] for p in intersections]
         iy_coords = [p[1] for p in intersections]
         ax.scatter(ix_coords, iy_coords, s=50, marker='x')
-        ax.set_title(f"K3,3 en 2D — intersecciones: {len(intersections)}")
+        ax.set_title(f"K3,3 in 2D — intersections: {len(intersections)}")
     else:
-        ax.set_title("K3,3 en 2D — sin intersecciones")
+        ax.set_title("K3,3 in 2D — no intersections (unexpected)")
 
     ax.set_aspect('equal')
     ax.set_xlim(-3, 3)
@@ -76,6 +75,6 @@ def draw_k33_2d():
     plt.tight_layout()
     plt.show()
 
-# Permite ejecutar directamente el archivo
+# Allow direct module execution
 if __name__ == "__main__":
     draw_k33_2d()
