@@ -1,143 +1,73 @@
-# k3_3_torus_3d_both_sides_fixed.py
-"""
-K3,3 en un toro 3D — bandas arriba y abajo (versión corregida).
-corrige el ValueError al mapear arrays y escalares en torus_point.
-"""
-
-import numpy as np
 import matplotlib.pyplot as plt
 
-# parámetros del toro
-R = 3.0
-r = 1.0
-
-def torus_point(u, v):
-    """
-    Mapea (u,v) a (x,y,z). Acepta escalares o arrays; devuelve array con shape (...,3).
-    Usa broadcast para garantizar que u y v tengan la misma forma antes de operar.
-    """
-    u = np.asarray(u)
-    v = np.asarray(v)
-    # Broadcast u and v to the same shape (handles scalar vs array)
-    u, v = np.broadcast_arrays(u, v)
-    x = (R + r * np.cos(v)) * np.cos(u)
-    y = (R + r * np.cos(v)) * np.sin(u)
-    z = r * np.sin(v)
-    return np.stack([x, y, z], axis=-1)
-
-# posición de nodos en parámetros (u,v)
-# Originalmente las "casas" estaban en la banda superior (v≈0) y los "servicios" en la inferior (v≈π).
-# Se solicita invertir: ahora las CASAS deben ser los puntos que antes eran servicios (v≈π) y
-# los SERVICIOS deben ocupar las posiciones superiores (v≈0), preservando la conectividad completa.
-
-# Posiciones nuevas (swap lógico):
-houses_param = {  # ahora en la banda inferior (antes services_param)
-    "A": (0.2, np.pi),
-    "B": (2.0 * np.pi / 3.0 + 0.2, np.pi),
-    "C": (4.0 * np.pi / 3.0 + 0.2, np.pi),
-}
-services_param = {  # ahora en la banda superior (antes houses_param)
-    "A": (0.0, 0.0),
-    "B": (2.0 * np.pi / 3.0, 0.0),
-    "C": (4.0 * np.pi / 3.0, 0.0),
-}
-
-# Colores se asocian a cada casa (quienes ahora están en la parte inferior).
+# Fundamental square torus coordinates
+houses = {"A": (0.2, 0.8), "B": (0.5, 0.8), "C": (0.8, 0.8)}
+services = {"A": (0.2, 0.2), "B": (0.5, 0.2), "C": (0.8, 0.2)}
 house_colors = {"A": "tab:blue", "B": "tab:orange", "C": "tab:green"}
 
-# número de aristas
-n_edges = len(houses_param) * len(services_param)
+fig, ax = plt.subplots(figsize=(6,6))
+ax.set_xlim(0,1)
+ax.set_ylim(0,1)
+ax.set_aspect('equal')
+ax.set_title("K3,3 on a 2D Topological Torus (Square)")
 
-def shortest_u_path(u0, u1, n=120):
-    """Interpolación en u considerando envoltura en 2π (camino corto)."""
-    u0 = float(u0) % (2*np.pi)
-    u1 = float(u1) % (2*np.pi)
-    diff = u1 - u0
-    if diff > np.pi:
-        diff -= 2*np.pi
-    elif diff < -np.pi:
-        diff += 2*np.pi
-    return np.linspace(u0, u0 + diff, n)
+# Draw square and arrows for identification
+ax.plot([0,1,1,0,0],[0,0,1,1,0],'k-', lw=2)
+arrow_props = dict(facecolor='black', arrowstyle='->', lw=1.5)
+ax.annotate("", xy=(1,0.05), xytext=(0,0.05), arrowprops=arrow_props)  # left-right
+ax.annotate("", xy=(0,0.95), xytext=(1,0.95), arrowprops=arrow_props)  # left-right
+ax.annotate("", xy=(0.05,1), xytext=(0.05,0), arrowprops=arrow_props)  # top-bottom
+ax.annotate("", xy=(0.95,0), xytext=(0.95,1), arrowprops=arrow_props)  # top-bottom
 
-# Construir bandas poloidales en DOS caras:
-n_top = n_edges // 2
-n_bottom = n_edges - n_top
-v_top = np.linspace(0.25, np.pi - 0.25, n_top) if n_top>0 else np.array([])
-v_bottom = np.linspace(np.pi + 0.25, 2*np.pi - 0.25, n_bottom) if n_bottom>0 else np.array([])
-v_bands = np.concatenate([v_top, v_bottom])
+# Draw nodes
+for hn,(x,y) in houses.items():
+    ax.scatter(x,y, s=200, color=house_colors[hn], edgecolor='k')
+    ax.text(x, y+0.03, f"H{hn}", ha='center')
+for sn,(x,y) in services.items():
+    ax.scatter(x,y, s=200, color='red', edgecolor='k')
+    ax.text(x, y-0.03, f"S{sn}", ha='center')
 
-# mallas del toro para la superficie
-u = np.linspace(0, 2*np.pi, 100)
-v = np.linspace(0, 2*np.pi, 60)
-U, V = np.meshgrid(u, v)
-surf_pts = torus_point(U, V)
-X, Y, Z = surf_pts[...,0], surf_pts[...,1], surf_pts[...,2]
-
-fig = plt.figure(figsize=(11,9))
-ax = fig.add_subplot(111, projection='3d')
-ax.set_title("K₃,₃ sobre un toro — bandas arriba y abajo (corregido)")
-
-# superficie del toro
-ax.plot_surface(X, Y, Z, rstride=4, cstride=4, color='lightgray', alpha=0.25, linewidth=0)
-
-# dibujar nodos (usa torus_point y desempaqueta robustamente)
-for name, (u_h, v_h) in houses_param.items():
-    p = torus_point(u_h, v_h)
-    if p.ndim == 1:
-        px, py, pz = p
+# Function to draw connection with wrap-around if needed
+def draw_edge(p1,p2,color):
+    x1,y1 = p1
+    x2,y2 = p2
+    dx = x2-x1
+    dy = y2-y1
+    # horizontal wrap
+    if abs(dx) > 0.5:
+        if dx>0:
+            # go left across edge
+            mid = (x2-1, y2)
+        else:
+            mid = (x2+1, y2)
+        ax.plot([x1, mid[0]], [y1, mid[1]], color=color, lw=2)
+        ax.plot([mid[0]%1, x2], [mid[1], y2], color=color, lw=2)
+    # vertical wrap
+    elif abs(dy) > 0.5:
+        if dy>0:
+            mid = (x2, y2-1)
+        else:
+            mid = (x2, y2+1)
+        ax.plot([x1, mid[0]], [y1, mid[1]], color=color, lw=2)
+        ax.plot([mid[0], x2], [mid[1]%1, y2], color=color, lw=2)
     else:
-        px, py, pz = p.reshape(-1, 3)[0]
-    # Casas ahora en la parte inferior (v≈π) se etiquetan igual
-    ax.scatter(px, py, pz, s=150, color=house_colors[name], edgecolor='k', zorder=20)
-    ax.text(px, py, pz+0.12, f"Casa {name}", ha='center', va='bottom')
+        ax.plot([x1,x2],[y1,y2], color=color, lw=2)
 
-for name, (u_s, v_s) in services_param.items():
-    p = torus_point(u_s, v_s)
-    if p.ndim == 1:
-        px, py, pz = p
-    else:
-        px, py, pz = p.reshape(-1, 3)[0]
-    # Servicios ahora en la parte superior (v≈0) en rojo
-    ax.scatter(px, py, pz, s=120, color='red', edgecolor='k', zorder=20)
-    ax.text(px, py, pz-0.12, f"Serv {name}", ha='center', va='top')
+# Draw all connections, carefully split to avoid crossings
+# For clarity, alternate horizontal vs vertical wrapping
+edges = [("A","A"),("A","B"),("A","C"),
+         ("B","A"),("B","B"),("B","C"),
+         ("C","A"),("C","B"),("C","C")]
 
-# para ayudar a ver las bandas: trazar círculos toroidales poloidales (sutil)
-for vb in v_bands:
-    uu = np.linspace(0, 2*np.pi, 300)
-    pts_ring = torus_point(uu, vb)   # ahora funciona con uu array y vb escalar
-    ax.plot(pts_ring[:,0], pts_ring[:,1], pts_ring[:,2], color='gray', alpha=0.12, linewidth=1)
+bend_map = {
+    ("A","A"):(0,0), ("A","B"):(1,0), ("A","C"):(-1,0),
+    ("B","A"):(0,1), ("B","B"):(0,-1), ("B","C"):(1,1),
+    ("C","A"):(-1,-1), ("C","B"):(1,-1), ("C","C"):(-1,1)
+}
 
-# dibujar aristas, asignando una banda distinta a cada arista
-edge_idx = 0
-for hn, (u_h, v_h) in houses_param.items():
-    for sn, (u_s, v_s) in services_param.items():
-        v_band = v_bands[edge_idx]
-        color = house_colors[hn]
+for hn,sn in edges:
+    draw_edge(houses[hn], services[sn], house_colors[hn])
 
-        # subir poloidal desde nodo casa hasta v_band (mantener u_h)
-        vs1 = np.linspace(v_h, v_band, 60)
-        us1 = np.full_like(vs1, u_h)
-        pts1 = torus_point(us1, vs1)
-
-        # desplazamiento en u alrededor del toro en v = v_band (camino corto en u)
-        us2 = shortest_u_path(u_h, u_s, n=200)
-        vs2 = np.full_like(us2, v_band)
-        pts2 = torus_point(us2, vs2)
-
-        # bajar poloidal desde v_band hasta v_s en u = u_s
-        vs3 = np.linspace(v_band, v_s, 60)
-        us3 = np.full_like(vs3, us2[-1] % (2*np.pi))
-        pts3 = torus_point(us3, vs3)
-
-        edge_pts = np.vstack([pts1, pts2, pts3])
-        ax.plot(edge_pts[:,0], edge_pts[:,1], edge_pts[:,2],
-                color=color, linewidth=2.4, solid_capstyle='round', zorder=15)
-
-        edge_idx += 1
-
-# estética
-ax.set_box_aspect([1,1,0.6])
-ax.view_init(elev=28, azim=40)
 ax.axis('off')
 plt.tight_layout()
 plt.show()
